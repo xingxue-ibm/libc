@@ -5698,6 +5698,15 @@ fn test_aix(target: &str) {
             // The function pointer comparison test would fail.
             "getdtablesize" => true,
 
+            // The AIX signatures for these non-POSIX functions differ from
+            // those on platforms like Linux: some arguments are not marked
+            // with the 'const' qualifier, even though they are not modified.
+            // To be consistent with other platforms, 'const' is added to the
+            // Rust declarations. However, this causes a mismatch with the AIX
+            // header signatures. Skipping.
+            "setdomainname" | "settimeofday" | "statfs" | "statfs64" | "statx" | "swapoff"
+            | "swapon" | "utmpname" | "setgroups" => true,
+
             // FIXME(ctest): Our API is unsound. The Rust API allows aliasing
             // pointers, but the C API requires pointers not to alias.
             // We should probably be at least using '&'/'&mut' here, see:
