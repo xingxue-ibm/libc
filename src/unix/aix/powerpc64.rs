@@ -1,3 +1,6 @@
+#[allow(unused_imports)]
+use core::ptr;
+
 use crate::off_t;
 use crate::prelude::*;
 
@@ -256,6 +259,70 @@ s_no_extra_traits! {
         pub __pad: [c_int; 3],
     }
 
+    pub union _kernel_simple_lock {
+        pub _slock: c_long,
+        // Should be pointer to 'lock_data_instrumented'
+        pub _slockp: *mut c_void,
+    }
+
+    pub struct fileops_t {
+        pub fo_rw: extern "C" fn(
+            file: *mut file,
+            rw: crate::uio_rw,
+            io: *mut c_void,
+            ext: c_long,
+            secattr: *mut c_void,
+        ) -> c_int,
+        pub fo_ioctl: extern "C" fn(
+            file: *mut file,
+            a: c_long,
+            b: crate::caddr_t,
+            c: c_long,
+            d: c_long,
+        ) -> c_int,
+        pub fo_select:
+            extern "C" fn(file: *mut file, a: c_int, b: *mut c_ushort, c: extern "C" fn()) -> c_int,
+        pub fo_close: extern "C" fn(file: *mut file) -> c_int,
+        pub fo_fstat: extern "C" fn(file: *mut file, sstat: *mut crate::stat) -> c_int,
+    }
+
+    pub struct file {
+        pub f_flag: c_long,
+        pub f_count: c_int,
+        pub f_options: c_short,
+        pub f_type: c_short,
+        // Should be pointer to 'vnode'
+        pub f_data: *mut c_void,
+        pub f_offset: c_longlong,
+        pub f_dir_off: c_long,
+        // Should be pointer to 'cred'
+        pub f_cred: *mut c_void,
+        pub f_lock: _kernel_simple_lock,
+        pub f_offset_lock: _kernel_simple_lock,
+        pub f_vinfo: crate::caddr_t,
+        pub f_ops: *mut fileops_t,
+        pub f_parentp: crate::caddr_t,
+        pub f_fnamep: crate::caddr_t,
+        pub f_fdata: [c_char; 160],
+    }
+
+    pub union __ld_info_file {
+        pub _ldinfo_fd: c_int,
+        pub _ldinfo_fp: *mut file,
+        pub _core_offset: c_long,
+    }
+
+    pub struct ld_info {
+        pub ldinfo_next: c_uint,
+        pub ldinfo_flags: c_uint,
+        pub _file: __ld_info_file,
+        pub ldinfo_textorg: *mut c_void,
+        pub ldinfo_textsize: c_ulong,
+        pub ldinfo_dataorg: *mut c_void,
+        pub ldinfo_datasize: c_ulong,
+        pub ldinfo_filename: [c_char; 2],
+    }
+
     pub union __pollfd_ext_u {
         pub addr: *mut c_void,
         pub data32: u32,
@@ -325,6 +392,127 @@ cfg_if! {
                 self.si_band.hash(state);
                 self.si_value.hash(state);
                 self.__si_flags.hash(state);
+            }
+        }
+
+        impl PartialEq for _kernel_simple_lock {
+            fn eq(&self, other: &_kernel_simple_lock) -> bool {
+                unsafe { self._slock == other._slock && self._slockp == other._slockp }
+            }
+        }
+        impl Eq for _kernel_simple_lock {}
+        impl hash::Hash for _kernel_simple_lock {
+            fn hash<H: hash::Hasher>(&self, state: &mut H) {
+                unsafe {
+                    self._slock.hash(state);
+                    self._slockp.hash(state);
+                }
+            }
+        }
+
+        impl PartialEq for fileops_t {
+            fn eq(&self, other: &fileops_t) -> bool {
+                ptr::fn_addr_eq(self.fo_rw, other.fo_rw)
+                    && ptr::fn_addr_eq(self.fo_ioctl, other.fo_ioctl)
+                    && ptr::fn_addr_eq(self.fo_select, other.fo_select)
+                    && ptr::fn_addr_eq(self.fo_close, other.fo_close)
+                    && ptr::fn_addr_eq(self.fo_fstat, other.fo_fstat)
+            }
+        }
+        impl Eq for fileops_t {}
+        impl hash::Hash for fileops_t {
+            fn hash<H: hash::Hasher>(&self, state: &mut H) {
+                self.fo_rw.hash(state);
+                self.fo_ioctl.hash(state);
+                self.fo_select.hash(state);
+                self.fo_close.hash(state);
+                self.fo_fstat.hash(state);
+            }
+        }
+
+        impl PartialEq for file {
+            fn eq(&self, other: &file) -> bool {
+                self.f_flag == other.f_flag
+                    && self.f_count == other.f_count
+                    && self.f_options == other.f_options
+                    && self.f_type == other.f_type
+                    && self.f_data == other.f_data
+                    && self.f_offset == other.f_offset
+                    && self.f_dir_off == other.f_dir_off
+                    && self.f_cred == other.f_cred
+                    && self.f_vinfo == other.f_vinfo
+                    && self.f_ops == other.f_ops
+                    && self.f_parentp == other.f_parentp
+                    && self.f_fnamep == other.f_fnamep
+                    && self.f_fdata == other.f_fdata
+                    && self.f_lock == other.f_lock
+                    && self.f_offset_lock == other.f_offset_lock
+            }
+        }
+        impl Eq for file {}
+        impl hash::Hash for file {
+            fn hash<H: hash::Hasher>(&self, state: &mut H) {
+                self.f_flag.hash(state);
+                self.f_count.hash(state);
+                self.f_options.hash(state);
+                self.f_type.hash(state);
+                self.f_data.hash(state);
+                self.f_offset.hash(state);
+                self.f_dir_off.hash(state);
+                self.f_cred.hash(state);
+                self.f_lock.hash(state);
+                self.f_offset_lock.hash(state);
+                self.f_vinfo.hash(state);
+                self.f_ops.hash(state);
+                self.f_parentp.hash(state);
+                self.f_fnamep.hash(state);
+                self.f_fdata.hash(state);
+            }
+        }
+
+        impl PartialEq for __ld_info_file {
+            fn eq(&self, other: &__ld_info_file) -> bool {
+                unsafe {
+                    self._ldinfo_fd == other._ldinfo_fd
+                        && self._ldinfo_fp == other._ldinfo_fp
+                        && self._core_offset == other._core_offset
+                }
+            }
+        }
+        impl Eq for __ld_info_file {}
+        impl hash::Hash for __ld_info_file {
+            fn hash<H: hash::Hasher>(&self, state: &mut H) {
+                unsafe {
+                    self._ldinfo_fd.hash(state);
+                    self._ldinfo_fp.hash(state);
+                    self._core_offset.hash(state);
+                }
+            }
+        }
+
+        impl PartialEq for ld_info {
+            fn eq(&self, other: &ld_info) -> bool {
+                self.ldinfo_next == other.ldinfo_next
+                    && self.ldinfo_flags == other.ldinfo_flags
+                    && self.ldinfo_textorg == other.ldinfo_textorg
+                    && self.ldinfo_textsize == other.ldinfo_textsize
+                    && self.ldinfo_dataorg == other.ldinfo_dataorg
+                    && self.ldinfo_datasize == other.ldinfo_datasize
+                    && self.ldinfo_filename == other.ldinfo_filename
+                    && self._file == other._file
+            }
+        }
+        impl Eq for ld_info {}
+        impl hash::Hash for ld_info {
+            fn hash<H: hash::Hasher>(&self, state: &mut H) {
+                self.ldinfo_next.hash(state);
+                self.ldinfo_flags.hash(state);
+                self.ldinfo_textorg.hash(state);
+                self.ldinfo_textsize.hash(state);
+                self.ldinfo_dataorg.hash(state);
+                self.ldinfo_datasize.hash(state);
+                self.ldinfo_filename.hash(state);
+                self._file.hash(state);
             }
         }
         impl PartialEq for __pollfd_ext_u {
