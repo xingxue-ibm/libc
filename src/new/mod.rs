@@ -137,6 +137,9 @@ cfg_if! {
     } else if #[cfg(target_os = "xous")] {
         mod xous;
         // pub(crate) use xous::*;
+    } else if #[cfg(target_os = "zos")] {
+        mod zos;
+        pub(crate) use zos::*;
     }
 }
 

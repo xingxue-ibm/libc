@@ -28,7 +28,7 @@ cfg_if! {
     ))] {
         pub type uid_t = c_ushort;
         pub type gid_t = c_ushort;
-    } else if #[cfg(any(target_os = "nto", target_os = "qnx"))] {
+    } else if #[cfg(any(target_os = "nto", target_os = "qnx", target_os = "zos"))] {
         pub type uid_t = i32;
         pub type gid_t = i32;
     } else {
@@ -41,14 +41,15 @@ extern_ty! {
     pub type DIR;
 }
 
-#[cfg(not(target_os = "nuttx"))]
+#[cfg(not(any(target_os = "nuttx", target_os = "zos")))]
 pub type locale_t = *mut c_void;
 
 s! {
     pub struct group {
         pub gr_name: *mut c_char,
+        #[cfg(not(target_os = "zos"))]
         pub gr_passwd: *mut c_char,
-        pub gr_gid: crate::gid_t,
+        pub gr_gid: gid_t,
         pub gr_mem: *mut *mut c_char,
     }
 
@@ -60,12 +61,17 @@ s! {
     #[derive(Default)]
     pub struct timeval {
         pub tv_sec: time_t,
-        #[cfg(not(gnu_time_bits64))]
+        #[cfg(not(any(gnu_time_bits64, target_os = "zos")))]
         pub tv_usec: crate::suseconds_t,
         // For 64 bit time on 32 bit linux glibc, suseconds_t is still
         // a 32 bit type.  Use __suseconds64_t instead
         #[cfg(gnu_time_bits64)]
         pub tv_usec: __suseconds64_t,
+
+        #[cfg(target_os = "zos")]
+        pub tv_usec_pad: u32,
+        #[cfg(target_os = "zos")]
+        pub tv_usec: suseconds_t,
     }
 
     // linux x32 compatibility
@@ -92,45 +98,59 @@ s! {
     pub struct rusage {
         pub ru_utime: timeval,
         pub ru_stime: timeval,
+        #[cfg(not(target_os = "zos"))]
         pub ru_maxrss: c_long,
         #[cfg(all(target_arch = "x86_64", target_pointer_width = "32"))]
         __pad1: Padding<u32>,
+        #[cfg(not(target_os = "zos"))]
         pub ru_ixrss: c_long,
         #[cfg(all(target_arch = "x86_64", target_pointer_width = "32"))]
         __pad2: Padding<u32>,
+        #[cfg(not(target_os = "zos"))]
         pub ru_idrss: c_long,
         #[cfg(all(target_arch = "x86_64", target_pointer_width = "32"))]
         __pad3: Padding<u32>,
+        #[cfg(not(target_os = "zos"))]
         pub ru_isrss: c_long,
         #[cfg(all(target_arch = "x86_64", target_pointer_width = "32"))]
         __pad4: Padding<u32>,
+        #[cfg(not(target_os = "zos"))]
         pub ru_minflt: c_long,
         #[cfg(all(target_arch = "x86_64", target_pointer_width = "32"))]
         __pad5: Padding<u32>,
+        #[cfg(not(target_os = "zos"))]
         pub ru_majflt: c_long,
         #[cfg(all(target_arch = "x86_64", target_pointer_width = "32"))]
         __pad6: Padding<u32>,
+        #[cfg(not(target_os = "zos"))]
         pub ru_nswap: c_long,
         #[cfg(all(target_arch = "x86_64", target_pointer_width = "32"))]
         __pad7: Padding<u32>,
+        #[cfg(not(target_os = "zos"))]
         pub ru_inblock: c_long,
         #[cfg(all(target_arch = "x86_64", target_pointer_width = "32"))]
         __pad8: Padding<u32>,
+        #[cfg(not(target_os = "zos"))]
         pub ru_oublock: c_long,
         #[cfg(all(target_arch = "x86_64", target_pointer_width = "32"))]
         __pad9: Padding<u32>,
+        #[cfg(not(target_os = "zos"))]
         pub ru_msgsnd: c_long,
         #[cfg(all(target_arch = "x86_64", target_pointer_width = "32"))]
         __pad10: Padding<u32>,
+        #[cfg(not(target_os = "zos"))]
         pub ru_msgrcv: c_long,
         #[cfg(all(target_arch = "x86_64", target_pointer_width = "32"))]
         __pad11: Padding<u32>,
+        #[cfg(not(target_os = "zos"))]
         pub ru_nsignals: c_long,
         #[cfg(all(target_arch = "x86_64", target_pointer_width = "32"))]
         __pad12: Padding<u32>,
+        #[cfg(not(target_os = "zos"))]
         pub ru_nvcsw: c_long,
         #[cfg(all(target_arch = "x86_64", target_pointer_width = "32"))]
         __pad13: Padding<u32>,
+        #[cfg(not(target_os = "zos"))]
         pub ru_nivcsw: c_long,
         #[cfg(all(target_arch = "x86_64", target_pointer_width = "32"))]
         __pad14: Padding<u32>,
@@ -255,7 +275,8 @@ cfg_if! {
     if #[cfg(all(
         not(any(target_os = "nto", target_os = "qnx")),
         not(target_os = "aix"),
-        not(target_os = "espidf")
+        not(target_os = "espidf"),
+        not(target_os = "zos")
     ))] {
         pub const DT_UNKNOWN: u8 = 0;
         pub const DT_FIFO: u8 = 1;
@@ -277,13 +298,18 @@ cfg_if! {
     if #[cfg(not(any(
         target_os = "nto",
         target_os = "qnx",
-        target_os = "l4re"
+        target_os = "l4re",
+        target_os = "zos"
     )))] {
         pub const USRQUOTA: c_int = 0;
         pub const GRPQUOTA: c_int = 1;
     }
 }
-pub const SIGIOT: c_int = 6;
+cfg_if! {
+    if #[cfg(not(target_os = "zos"))] {
+        pub const SIGIOT: c_int = 6;
+    }
+}
 
 pub const S_ISUID: mode_t = 0o4000;
 pub const S_ISGID: mode_t = 0o2000;
@@ -294,10 +320,15 @@ cfg_if! {
         target_os = "haiku",
         target_os = "illumos",
         target_os = "solaris",
-        target_os = "cygwin"
+        target_os = "cygwin",
+        target_os = "zos"
     )))] {
         pub const IF_NAMESIZE: size_t = 16;
         pub const IFNAMSIZ: size_t = IF_NAMESIZE;
+    } else if #[cfg(target_os = "zos")] {
+        // On z/OS IFNAMSIZ=16 (without NUL) and IF_NAMESIZE=17 (with NUL) are distinct.
+        pub const IFNAMSIZ: size_t = 16;
+        pub const IF_NAMESIZE: size_t = 17;
     }
 }
 
@@ -315,7 +346,11 @@ pub const LOG_USER: c_int = 1 << 3;
 pub const LOG_MAIL: c_int = 2 << 3;
 pub const LOG_DAEMON: c_int = 3 << 3;
 pub const LOG_AUTH: c_int = 4 << 3;
-pub const LOG_SYSLOG: c_int = 5 << 3;
+cfg_if! {
+    if #[cfg(not(target_os = "zos"))] {
+        pub const LOG_SYSLOG: c_int = 5 << 3;
+    }
+}
 pub const LOG_LPR: c_int = 6 << 3;
 pub const LOG_NEWS: c_int = 7 << 3;
 pub const LOG_UUCP: c_int = 8 << 3;
@@ -337,11 +372,14 @@ cfg_if! {
         pub const LOG_NOWAIT: c_int = 0x10;
     }
 }
-pub const LOG_PRIMASK: c_int = 7;
-pub const LOG_FACMASK: c_int = 0x3f8;
-
 cfg_if! {
-    if #[cfg(not(any(target_os = "nto", target_os = "qnx")))] {
+    if #[cfg(not(target_os = "zos"))] {
+        pub const LOG_PRIMASK: c_int = 7;
+        pub const LOG_FACMASK: c_int = 0x3f8;
+    }
+}
+cfg_if! {
+    if #[cfg(not(any(target_os = "nto", target_os = "qnx", target_os = "zos")))] {
         pub const PRIO_MIN: c_int = -20;
         pub const PRIO_MAX: c_int = 20;
     }
@@ -366,16 +404,19 @@ pub const IN6ADDR_ANY_INIT: in6_addr = in6_addr {
     s6_addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 };
 
-pub const ARPOP_REQUEST: u16 = 1;
-pub const ARPOP_REPLY: u16 = 2;
-
-pub const ATF_COM: c_int = 0x02;
-pub const ATF_PERM: c_int = 0x04;
-pub const ATF_PUBL: c_int = 0x08;
-pub const ATF_USETRAILERS: c_int = 0x10;
+cfg_if! {
+    if #[cfg(not(target_os = "zos"))] {
+        pub const ARPOP_REQUEST: u16 = 1;
+        pub const ARPOP_REPLY: u16 = 2;
+        pub const ATF_COM: c_int = 0x02;
+        pub const ATF_PERM: c_int = 0x04;
+        pub const ATF_PUBL: c_int = 0x08;
+        pub const ATF_USETRAILERS: c_int = 0x10;
+    }
+}
 
 cfg_if! {
-    if #[cfg(any(target_os = "nto", target_os = "qnx", target_os = "aix"))] {
+    if #[cfg(any(target_os = "nto", target_os = "qnx", target_os = "aix", target_os = "zos"))] {
         pub const FNM_PERIOD: c_int = 1 << 1;
     } else {
         pub const FNM_PERIOD: c_int = 1 << 2;
@@ -390,7 +431,7 @@ cfg_if! {
         target_os = "netbsd"
     ))] {
         pub const FNM_CASEFOLD: c_int = 1 << 3;
-    } else if #[cfg(not(target_os = "aix"))] {
+    } else if #[cfg(not(any(target_os = "aix", target_os = "zos")))] {
         pub const FNM_CASEFOLD: c_int = 1 << 4;
     }
 }
@@ -614,6 +655,8 @@ cfg_if! {
         #[link(name = "bsd")]
         #[link(name = "pthread")]
         extern "C" {}
+    } else if #[cfg(target_os = "zos")] {
+        // FIXME z/OS -  any link libraries to add?
     } else {
         #[link(name = "c")]
         #[link(name = "m")]
@@ -636,19 +679,33 @@ extern_ty! {
 }
 
 extern "C" {
+    #[cfg_attr(target_os = "zos", link_name = "@@A00210")]
     pub fn isalnum(c: c_int) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00211")]
     pub fn isalpha(c: c_int) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00213")]
     pub fn iscntrl(c: c_int) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00214")]
     pub fn isdigit(c: c_int) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00215")]
     pub fn isgraph(c: c_int) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00216")]
     pub fn islower(c: c_int) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00217")]
     pub fn isprint(c: c_int) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00218")]
     pub fn ispunct(c: c_int) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00219")]
     pub fn isspace(c: c_int) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00220")]
     pub fn isupper(c: c_int) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00221")]
     pub fn isxdigit(c: c_int) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00212")]
     pub fn isblank(c: c_int) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00222")]
     pub fn tolower(c: c_int) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00223")]
     pub fn toupper(c: c_int) -> c_int;
     pub fn qsort(
         base: *mut c_void,
@@ -668,39 +725,49 @@ extern "C" {
         link_name = "fopen$UNIX2003"
     )]
     #[cfg_attr(gnu_file_offset_bits64, link_name = "fopen64")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00246")]
     pub fn fopen(filename: *const c_char, mode: *const c_char) -> *mut FILE;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
         link_name = "freopen$UNIX2003"
     )]
     #[cfg_attr(gnu_file_offset_bits64, link_name = "freopen64")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00247")]
     pub fn freopen(filename: *const c_char, mode: *const c_char, file: *mut FILE) -> *mut FILE;
 
     pub fn fflush(file: *mut FILE) -> c_int;
     pub fn fclose(file: *mut FILE) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00243")]
     pub fn remove(filename: *const c_char) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00244")]
     pub fn rename(oldname: *const c_char, newname: *const c_char) -> c_int;
     #[cfg_attr(gnu_file_offset_bits64, link_name = "tmpfile64")]
     pub fn tmpfile() -> *mut FILE;
     pub fn setvbuf(stream: *mut FILE, buffer: *mut c_char, mode: c_int, size: size_t) -> c_int;
     pub fn setbuf(stream: *mut FILE, buf: *mut c_char);
     pub fn getchar() -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00303")]
     pub fn putchar(c: c_int) -> c_int;
     pub fn fgetc(stream: *mut FILE) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00305")]
     pub fn fgets(buf: *mut c_char, n: c_int, stream: *mut FILE) -> *mut c_char;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00302")]
     pub fn fputc(c: c_int, stream: *mut FILE) -> c_int;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
         link_name = "fputs$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00307")]
     pub fn fputs(s: *const c_char, stream: *mut FILE) -> c_int;
     pub fn puts(s: *const c_char) -> c_int;
     pub fn ungetc(c: c_int, stream: *mut FILE) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00308")]
     pub fn fread(ptr: *mut c_void, size: size_t, nobj: size_t, stream: *mut FILE) -> size_t;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
         link_name = "fwrite$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00309")]
     pub fn fwrite(ptr: *const c_void, size: size_t, nobj: size_t, stream: *mut FILE) -> size_t;
     pub fn fseek(stream: *mut FILE, offset: c_long, whence: c_int) -> c_int;
     pub fn ftell(stream: *mut FILE) -> c_long;
@@ -714,20 +781,31 @@ extern "C" {
     pub fn feof(stream: *mut FILE) -> c_int;
     pub fn ferror(stream: *mut FILE) -> c_int;
     pub fn clearerr(stream: *mut FILE);
+    #[cfg_attr(target_os = "zos", link_name = "@@A00178")]
     pub fn perror(s: *const c_char);
+    #[cfg_attr(target_os = "zos", link_name = "@@A00164")]
     pub fn atof(s: *const c_char) -> c_double;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00165")]
     pub fn atoi(s: *const c_char) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00166")]
     pub fn atol(s: *const c_char) -> c_long;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00455")]
     pub fn atoll(s: *const c_char) -> c_longlong;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
         link_name = "strtod$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00167")]
     pub fn strtod(s: *const c_char, endp: *mut *mut c_char) -> c_double;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00456")]
     pub fn strtof(s: *const c_char, endp: *mut *mut c_char) -> c_float;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00168")]
     pub fn strtol(s: *const c_char, endp: *mut *mut c_char, base: c_int) -> c_long;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00343")]
     pub fn strtoll(s: *const c_char, endp: *mut *mut c_char, base: c_int) -> c_longlong;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00169")]
     pub fn strtoul(s: *const c_char, endp: *mut *mut c_char, base: c_int) -> c_ulong;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00344")]
     pub fn strtoull(s: *const c_char, endp: *mut *mut c_char, base: c_int) -> c_ulonglong;
     #[cfg_attr(target_os = "aix", link_name = "vec_calloc")]
     pub fn calloc(nobj: size_t, size: size_t) -> *mut c_void;
@@ -737,47 +815,64 @@ extern "C" {
     pub fn free(p: *mut c_void);
     pub fn abort() -> !;
     pub fn exit(status: c_int) -> !;
+    #[cfg_attr(target_os = "zos", link_name = "@EXIT")]
     pub fn _exit(status: c_int) -> !;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
         link_name = "system$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00189")]
     pub fn system(s: *const c_char) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00181")]
     pub fn getenv(s: *const c_char) -> *mut c_char;
 
     pub fn strcpy(dst: *mut c_char, src: *const c_char) -> *mut c_char;
     pub fn strncpy(dst: *mut c_char, src: *const c_char, n: size_t) -> *mut c_char;
+    #[cfg(not(target_os = "zos"))]
     pub fn stpcpy(dst: *mut c_char, src: *const c_char) -> *mut c_char;
     pub fn strcat(s: *mut c_char, ct: *const c_char) -> *mut c_char;
     pub fn strncat(s: *mut c_char, ct: *const c_char, n: size_t) -> *mut c_char;
     pub fn strcmp(cs: *const c_char, ct: *const c_char) -> c_int;
     pub fn strncmp(cs: *const c_char, ct: *const c_char, n: size_t) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00049")]
     pub fn strcoll(cs: *const c_char, ct: *const c_char) -> c_int;
     pub fn strchr(cs: *const c_char, c: c_int) -> *mut c_char;
     pub fn strrchr(cs: *const c_char, c: c_int) -> *mut c_char;
     pub fn strspn(cs: *const c_char, ct: *const c_char) -> size_t;
     pub fn strcspn(cs: *const c_char, ct: *const c_char) -> size_t;
     pub fn strdup(cs: *const c_char) -> *mut c_char;
+    #[cfg(not(target_os = "zos"))]
     pub fn strndup(cs: *const c_char, n: size_t) -> *mut c_char;
+    #[cfg_attr(target_os = "zos", link_name = "STRPBRK")]
     pub fn strpbrk(cs: *const c_char, ct: *const c_char) -> *mut c_char;
+    #[cfg_attr(target_os = "zos", link_name = "STRSTR")]
     pub fn strstr(cs: *const c_char, ct: *const c_char) -> *mut c_char;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00292")]
     pub fn strcasecmp(s1: *const c_char, s2: *const c_char) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00293")]
     pub fn strncasecmp(s1: *const c_char, s2: *const c_char, n: size_t) -> c_int;
     pub fn strlen(cs: *const c_char) -> size_t;
+    #[cfg(not(target_os = "zos"))]
     pub fn strnlen(cs: *const c_char, maxlen: size_t) -> size_t;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
         link_name = "strerror$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00177")]
     pub fn strerror(n: c_int) -> *mut c_char;
     pub fn strtok(s: *mut c_char, t: *const c_char) -> *mut c_char;
+    #[cfg_attr(target_os = "zos", link_name = "@@STTK@R")]
     pub fn strtok_r(s: *mut c_char, t: *const c_char, p: *mut *mut c_char) -> *mut c_char;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00053")]
     pub fn strxfrm(s: *mut c_char, ct: *const c_char, n: size_t) -> size_t;
+    #[cfg(not(target_os = "zos"))]
     pub fn strsignal(sig: c_int) -> *mut c_char;
     pub fn wcslen(buf: *const wchar_t) -> size_t;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00013")]
     pub fn wcstombs(dest: *mut c_char, src: *const wchar_t, n: size_t) -> size_t;
 
     pub fn memchr(cx: *const c_void, c: c_int, n: size_t) -> *mut c_void;
+    #[cfg_attr(target_os = "zos", link_name = "WMEMCHR")]
     pub fn wmemchr(cx: *const wchar_t, c: wchar_t, n: size_t) -> *mut wchar_t;
     pub fn memcmp(cx: *const c_void, ct: *const c_void, n: size_t) -> c_int;
     pub fn memcpy(dest: *mut c_void, src: *const c_void, n: size_t) -> *mut c_void;
@@ -788,30 +883,41 @@ extern "C" {
 
 extern "C" {
     #[cfg_attr(target_os = "netbsd", link_name = "__getpwnam50")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00265")]
     pub fn getpwnam(name: *const c_char) -> *mut passwd;
     #[cfg_attr(target_os = "netbsd", link_name = "__getpwuid50")]
-    pub fn getpwuid(uid: crate::uid_t) -> *mut passwd;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00266")]
+    pub fn getpwuid(uid: uid_t) -> *mut passwd;
 
+    #[cfg_attr(target_os = "zos", link_name = "@@A00152")]
     pub fn fprintf(stream: *mut crate::FILE, format: *const c_char, ...) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00118")]
     pub fn printf(format: *const c_char, ...) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00433")]
     pub fn snprintf(s: *mut c_char, n: size_t, format: *const c_char, ...) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00153")]
     pub fn sprintf(s: *mut c_char, format: *const c_char, ...) -> c_int;
     #[cfg_attr(
         all(target_os = "linux", not(target_env = "uclibc")),
         link_name = "__isoc99_fscanf"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00159")]
     pub fn fscanf(stream: *mut crate::FILE, format: *const c_char, ...) -> c_int;
     #[cfg_attr(
         all(target_os = "linux", not(target_env = "uclibc")),
         link_name = "__isoc99_scanf"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00160")]
     pub fn scanf(format: *const c_char, ...) -> c_int;
     #[cfg_attr(
         all(target_os = "linux", not(target_env = "uclibc")),
         link_name = "__isoc99_sscanf"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00161")]
     pub fn sscanf(s: *const c_char, format: *const c_char, ...) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@GETCHU")]
     pub fn getchar_unlocked() -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00432")]
     pub fn putchar_unlocked(c: c_int) -> c_int;
 
     #[cfg(not(all(target_arch = "powerpc", target_vendor = "nintendo")))]
@@ -830,6 +936,7 @@ extern "C" {
         link_name = "__xnet_connect"
     )]
     #[cfg_attr(target_os = "espidf", link_name = "lwip_connect")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00407")]
     pub fn connect(socket: c_int, address: *const sockaddr, len: socklen_t) -> c_int;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
@@ -844,6 +951,7 @@ extern "C" {
     )]
     #[cfg_attr(target_os = "espidf", link_name = "lwip_accept")]
     #[cfg_attr(target_os = "aix", link_name = "naccept")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00404")]
     pub fn accept(socket: c_int, address: *mut sockaddr, address_len: *mut socklen_t) -> c_int;
     #[cfg(not(all(target_arch = "powerpc", target_vendor = "nintendo")))]
     #[cfg_attr(
@@ -852,6 +960,7 @@ extern "C" {
     )]
     #[cfg_attr(target_os = "espidf", link_name = "lwip_getpeername")]
     #[cfg_attr(target_os = "aix", link_name = "ngetpeername")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00408")]
     pub fn getpeername(socket: c_int, address: *mut sockaddr, address_len: *mut socklen_t)
         -> c_int;
     #[cfg(not(all(target_arch = "powerpc", target_vendor = "nintendo")))]
@@ -861,10 +970,12 @@ extern "C" {
     )]
     #[cfg_attr(target_os = "espidf", link_name = "lwip_getsockname")]
     #[cfg_attr(target_os = "aix", link_name = "ngetsockname")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00409")]
     pub fn getsockname(socket: c_int, address: *mut sockaddr, address_len: *mut socklen_t)
         -> c_int;
     #[cfg_attr(target_os = "espidf", link_name = "lwip_setsockopt")]
     #[cfg_attr(gnu_time_bits64, link_name = "__setsockopt64")]
+    #[cfg_attr(target_os = "zos", link_name = "@@STSOC")]
     pub fn setsockopt(
         socket: c_int,
         level: c_int,
@@ -880,6 +991,7 @@ extern "C" {
         any(target_os = "illumos", target_os = "solaris"),
         link_name = "__xnet_socketpair"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@SCKTP")]
     pub fn socketpair(
         domain: c_int,
         type_: c_int,
@@ -896,6 +1008,7 @@ extern "C" {
         link_name = "__xnet_sendto"
     )]
     #[cfg_attr(target_os = "espidf", link_name = "lwip_sendto")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00411")]
     pub fn sendto(
         socket: c_int,
         buf: *const c_void,
@@ -911,6 +1024,7 @@ extern "C" {
         all(target_os = "macos", target_arch = "x86"),
         link_name = "chmod$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00129")]
     pub fn chmod(path: *const c_char, mode: mode_t) -> c_int;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
@@ -935,6 +1049,7 @@ extern "C" {
     #[cfg_attr(musl_redir_time64, link_name = "__fstat_time64")]
     pub fn fstat(fildes: c_int, buf: *mut stat) -> c_int;
 
+    #[cfg_attr(target_os = "zos", link_name = "@@A00130")]
     pub fn mkdir(path: *const c_char, mode: mode_t) -> c_int;
 
     #[cfg_attr(
@@ -952,6 +1067,7 @@ extern "C" {
         link_name = "stat64"
     )]
     #[cfg_attr(musl_redir_time64, link_name = "__stat_time64")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00131")]
     pub fn stat(path: *const c_char, buf: *mut stat) -> c_int;
 
     pub fn pclose(stream: *mut crate::FILE) -> c_int;
@@ -959,6 +1075,7 @@ extern "C" {
         all(target_os = "macos", target_arch = "x86"),
         link_name = "fdopen$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00241")]
     pub fn fdopen(fd: c_int, mode: *const c_char) -> *mut crate::FILE;
     pub fn fileno(stream: *mut crate::FILE) -> c_int;
 
@@ -967,12 +1084,14 @@ extern "C" {
         link_name = "open$UNIX2003"
     )]
     #[cfg_attr(gnu_file_offset_bits64, link_name = "open64")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00144")]
     pub fn open(path: *const c_char, oflag: c_int, ...) -> c_int;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
         link_name = "creat$UNIX2003"
     )]
     #[cfg_attr(gnu_file_offset_bits64, link_name = "creat64")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00143")]
     pub fn creat(path: *const c_char, mode: mode_t) -> c_int;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
@@ -994,6 +1113,7 @@ extern "C" {
         link_name = "opendir$INODE64$UNIX2003"
     )]
     #[cfg_attr(target_os = "netbsd", link_name = "__opendir30")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00371")]
     pub fn opendir(dirname: *const c_char) -> *mut crate::DIR;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86_64"),
@@ -1003,6 +1123,7 @@ extern "C" {
         all(target_os = "macos", target_arch = "x86"),
         link_name = "fdopendir$INODE64$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@FDODIR")]
     pub fn fdopendir(fd: c_int) -> *mut crate::DIR;
 
     #[cfg_attr(
@@ -1015,6 +1136,7 @@ extern "C" {
         link_name = "readdir@FBSD_1.0"
     )]
     #[cfg_attr(gnu_file_offset_bits64, link_name = "readdir64")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00372")]
     pub fn readdir(dirp: *mut crate::DIR) -> *mut crate::dirent;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
@@ -1029,19 +1151,28 @@ extern "C" {
         all(target_os = "macos", target_arch = "x86"),
         link_name = "rewinddir$INODE64$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@REWDIR")]
     pub fn rewinddir(dirp: *mut crate::DIR);
 
-    pub fn fchmodat(dirfd: c_int, pathname: *const c_char, mode: mode_t, flags: c_int) -> c_int;
-    pub fn fchown(fd: c_int, owner: crate::uid_t, group: crate::gid_t) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00606")]
+    pub fn fchmodat(
+        dirfd: c_int,
+        pathname: *const c_char,
+        mode: mode_t,
+        flags: c_int,
+    ) -> c_int;
+    pub fn fchown(fd: c_int, owner: uid_t, group: gid_t) -> c_int;
     #[cfg(not(target_os = "l4re"))]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00607")]
     pub fn fchownat(
         dirfd: c_int,
         pathname: *const c_char,
-        owner: crate::uid_t,
-        group: crate::gid_t,
+        owner: uid_t,
+        group: gid_t,
         flags: c_int,
     ) -> c_int;
     #[cfg_attr(gnu_file_offset_bits64, link_name = "openat64")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00613")]
     pub fn openat(dirfd: c_int, pathname: *const c_char, flags: c_int, ...) -> c_int;
     #[cfg_attr(
         all(target_os = "macos", not(target_arch = "aarch64")),
@@ -1058,8 +1189,10 @@ extern "C" {
     )]
     #[cfg(not(target_os = "l4re"))]
     #[cfg_attr(musl_redir_time64, link_name = "__fstatat_time64")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00608")]
     pub fn fstatat(dirfd: c_int, pathname: *const c_char, buf: *mut stat, flags: c_int) -> c_int;
     #[cfg(not(target_os = "l4re"))]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00609")]
     pub fn linkat(
         olddirfd: c_int,
         oldpath: *const c_char,
@@ -1068,8 +1201,10 @@ extern "C" {
         flags: c_int,
     ) -> c_int;
     #[cfg(not(target_os = "l4re"))]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00610")]
     pub fn mkdirat(dirfd: c_int, pathname: *const c_char, mode: mode_t) -> c_int;
     #[cfg(not(target_os = "l4re"))]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00615")]
     pub fn renameat(
         olddirfd: c_int,
         oldpath: *const c_char,
@@ -1077,19 +1212,25 @@ extern "C" {
         newpath: *const c_char,
     ) -> c_int;
     #[cfg(not(target_os = "l4re"))]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00617")]
     pub fn symlinkat(target: *const c_char, newdirfd: c_int, linkpath: *const c_char) -> c_int;
     #[cfg(not(target_os = "l4re"))]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00618")]
     pub fn unlinkat(dirfd: c_int, pathname: *const c_char, flags: c_int) -> c_int;
 
+    #[cfg_attr(target_os = "zos", link_name = "@@A00192")]
     pub fn access(path: *const c_char, amode: c_int) -> c_int;
     pub fn alarm(seconds: c_uint) -> c_uint;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00193")]
     pub fn chdir(dir: *const c_char) -> c_int;
     pub fn fchdir(dirfd: c_int) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00194")]
     pub fn chown(path: *const c_char, uid: uid_t, gid: gid_t) -> c_int;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
         link_name = "lchown$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00198")]
     pub fn lchown(path: *const c_char, uid: uid_t, gid: gid_t) -> c_int;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
@@ -1103,27 +1244,38 @@ extern "C" {
     pub fn dup(fd: c_int) -> c_int;
     pub fn dup2(src: c_int, dst: c_int) -> c_int;
 
+    #[cfg_attr(target_os = "zos", link_name = "@@A00039")]
     pub fn execl(path: *const c_char, arg0: *const c_char, ...) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00051")]
     pub fn execle(path: *const c_char, arg0: *const c_char, ...) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00055")]
     pub fn execlp(file: *const c_char, arg0: *const c_char, ...) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00068")]
     pub fn execv(prog: *const c_char, argv: *const *mut c_char) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00084")]
     pub fn execve(prog: *const c_char, argv: *const *mut c_char, envp: *const *mut c_char)
         -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00085")]
     pub fn execvp(c: *const c_char, argv: *const *mut c_char) -> c_int;
 
     pub fn fork() -> pid_t;
+    #[cfg_attr(target_os = "zos", link_name = "@@FPATHC")]
     pub fn fpathconf(filedes: c_int, name: c_int) -> c_long;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00196")]
     pub fn getcwd(buf: *mut c_char, size: size_t) -> *mut c_char;
     pub fn getegid() -> gid_t;
     pub fn geteuid() -> uid_t;
     pub fn getgid() -> gid_t;
+    #[cfg_attr(target_os = "zos", link_name = "@@GETGRO")]
     pub fn getgroups(ngroups_max: c_int, groups: *mut gid_t) -> c_int;
     #[cfg_attr(target_os = "illumos", link_name = "getloginx")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00261")]
     pub fn getlogin() -> *mut c_char;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
         link_name = "getopt$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00190")]
     pub fn getopt(argc: c_int, argv: *const *mut c_char, optstr: *const c_char) -> c_int;
     pub fn getpgid(pid: pid_t) -> pid_t;
     pub fn getpgrp() -> pid_t;
@@ -1132,11 +1284,14 @@ extern "C" {
     pub fn getuid() -> uid_t;
     pub fn isatty(fd: c_int) -> c_int;
     #[cfg_attr(target_os = "solaris", link_name = "__link_xpg4")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00199")]
     pub fn link(src: *const c_char, dst: *const c_char) -> c_int;
     #[cfg_attr(gnu_file_offset_bits64, link_name = "lseek64")]
     pub fn lseek(fd: c_int, offset: off_t, whence: c_int) -> off_t;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00200")]
     pub fn pathconf(path: *const c_char, name: c_int) -> c_long;
     pub fn pipe(fds: *mut c_int) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@PMEMAL")]
     pub fn posix_memalign(memptr: *mut *mut c_void, align: size_t, size: size_t) -> c_int;
     pub fn aligned_alloc(alignment: size_t, size: size_t) -> *mut c_void;
     #[cfg_attr(
@@ -1144,6 +1299,7 @@ extern "C" {
         link_name = "read$UNIX2003"
     )]
     pub fn read(fd: c_int, buf: *mut c_void, count: size_t) -> ssize_t;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00203")]
     pub fn rmdir(path: *const c_char) -> c_int;
     pub fn seteuid(uid: uid_t) -> c_int;
     pub fn setegid(gid: gid_t) -> c_int;
@@ -1165,9 +1321,13 @@ extern "C" {
     #[cfg_attr(target_os = "netbsd", link_name = "__nanosleep50")]
     #[cfg_attr(gnu_time_bits64, link_name = "__nanosleep64")]
     #[cfg_attr(musl_redir_time64, link_name = "__nanosleep_time64")]
+    #[cfg_attr(target_os = "zos", link_name = "@@NANOSL")]
     pub fn nanosleep(rqtp: *const timespec, rmtp: *mut timespec) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@TCGPGR")]
     pub fn tcgetpgrp(fd: c_int) -> pid_t;
-    pub fn tcsetpgrp(fd: c_int, pgrp: crate::pid_t) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@TCSPGR")]
+    pub fn tcsetpgrp(fd: c_int, pgrp: pid_t) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00294")]
     pub fn ttyname(fd: c_int) -> *mut c_char;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
@@ -1177,7 +1337,9 @@ extern "C" {
         any(target_os = "illumos", target_os = "solaris"),
         link_name = "__posix_ttyname_r"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00034")]
     pub fn ttyname_r(fd: c_int, buf: *mut c_char, buflen: size_t) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00207")]
     pub fn unlink(c: *const c_char) -> c_int;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
@@ -1210,6 +1372,7 @@ extern "C" {
 
     #[cfg_attr(target_os = "netbsd", link_name = "__utime50")]
     #[cfg_attr(any(gnu_time_bits64, musl_redir_time64), link_name = "__utime64")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00328")]
     pub fn utime(file: *const c_char, buf: *const utimbuf) -> c_int;
 
     #[cfg_attr(
@@ -1223,10 +1386,14 @@ extern "C" {
     )]
     pub fn killpg(pgrp: pid_t, sig: c_int) -> c_int;
 
-    pub fn mlock(addr: *const c_void, len: size_t) -> c_int;
-    pub fn munlock(addr: *const c_void, len: size_t) -> c_int;
-    pub fn mlockall(flags: c_int) -> c_int;
-    pub fn munlockall() -> c_int;
+    cfg_if! {
+        if #[cfg(not(target_os = "zos"))] {
+            pub fn mlock(addr: *const c_void, len: size_t) -> c_int;
+            pub fn munlock(addr: *const c_void, len: size_t) -> c_int;
+            pub fn mlockall(flags: c_int) -> c_int;
+            pub fn munlockall() -> c_int;
+        }
+    }
 
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
@@ -1247,7 +1414,9 @@ extern "C" {
     )]
     pub fn munmap(addr: *mut c_void, len: size_t) -> c_int;
 
+    #[cfg_attr(target_os = "zos", link_name = "@@A00116")]
     pub fn if_nametoindex(ifname: *const c_char) -> c_uint;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00117")]
     pub fn if_indextoname(ifindex: c_uint, ifname: *mut c_char) -> *mut c_char;
 
     #[cfg_attr(
@@ -1265,6 +1434,7 @@ extern "C" {
         link_name = "lstat64"
     )]
     #[cfg_attr(musl_redir_time64, link_name = "__lstat_time64")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00135")]
     pub fn lstat(path: *const c_char, buf: *mut stat) -> c_int;
 
     #[cfg_attr(
@@ -1277,17 +1447,21 @@ extern "C" {
         all(target_os = "macos", target_arch = "x86"),
         link_name = "setenv$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00188")]
     pub fn setenv(name: *const c_char, val: *const c_char, overwrite: c_int) -> c_int;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
         link_name = "unsetenv$UNIX2003"
     )]
     #[cfg_attr(target_os = "netbsd", link_name = "__unsetenv13")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00471")]
     pub fn unsetenv(name: *const c_char) -> c_int;
 
+    #[cfg_attr(target_os = "zos", link_name = "@@A00205")]
     pub fn symlink(path1: *const c_char, path2: *const c_char) -> c_int;
 
     #[cfg_attr(gnu_file_offset_bits64, link_name = "truncate64")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00206")]
     pub fn truncate(path: *const c_char, length: off_t) -> c_int;
     #[cfg_attr(gnu_file_offset_bits64, link_name = "ftruncate64")]
     pub fn ftruncate(fd: c_int, length: off_t) -> c_int;
@@ -1309,59 +1483,83 @@ extern "C" {
         ),
         link_name = "realpath$DARWIN_EXTSN"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00187")]
     pub fn realpath(pathname: *const c_char, resolved: *mut c_char) -> *mut c_char;
 
     #[cfg_attr(target_os = "netbsd", link_name = "__times13")]
     pub fn times(buf: *mut crate::tms) -> crate::clock_t;
 
+    #[cfg_attr(target_os = "zos", link_name = "@@PT@S")]
     pub fn pthread_self() -> crate::pthread_t;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3E")]
     pub fn pthread_equal(t1: crate::pthread_t, t2: crate::pthread_t) -> c_int;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
         link_name = "pthread_join$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3J")]
     pub fn pthread_join(native: crate::pthread_t, value: *mut *mut c_void) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT@EXI")]
     pub fn pthread_exit(value: *mut c_void) -> !;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3AI")]
     pub fn pthread_attr_init(attr: *mut crate::pthread_attr_t) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3AD")]
     pub fn pthread_attr_destroy(attr: *mut crate::pthread_attr_t) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3AGS")]
     pub fn pthread_attr_getstacksize(
         attr: *const crate::pthread_attr_t,
         stacksize: *mut size_t,
     ) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3ASS")]
     pub fn pthread_attr_setstacksize(attr: *mut crate::pthread_attr_t, stack_size: size_t)
         -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3ASD")]
     pub fn pthread_attr_setdetachstate(attr: *mut crate::pthread_attr_t, state: c_int) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3D")]
     pub fn pthread_detach(thread: crate::pthread_t) -> c_int;
     #[cfg_attr(target_os = "netbsd", link_name = "__libc_thr_yield")]
     pub fn sched_yield() -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3KC")]
     pub fn pthread_key_create(
         key: *mut crate::pthread_key_t,
         dtor: Option<unsafe extern "C" fn(*mut c_void)>,
     ) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT@KD")]
     pub fn pthread_key_delete(key: crate::pthread_key_t) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT8GS")]
     pub fn pthread_getspecific(key: crate::pthread_key_t) -> *mut c_void;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3SS")]
     pub fn pthread_setspecific(key: crate::pthread_key_t, value: *const c_void) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3MI")]
     pub fn pthread_mutex_init(
         lock: *mut crate::pthread_mutex_t,
         attr: *const crate::pthread_mutexattr_t,
     ) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3MD")]
     pub fn pthread_mutex_destroy(lock: *mut crate::pthread_mutex_t) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3ML")]
     pub fn pthread_mutex_lock(lock: *mut crate::pthread_mutex_t) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3MT")]
     pub fn pthread_mutex_trylock(lock: *mut crate::pthread_mutex_t) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3MU")]
     pub fn pthread_mutex_unlock(lock: *mut crate::pthread_mutex_t) -> c_int;
 
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3XI")]
     pub fn pthread_mutexattr_init(attr: *mut crate::pthread_mutexattr_t) -> c_int;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
         link_name = "pthread_mutexattr_destroy$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3XS")]
     pub fn pthread_mutexattr_destroy(attr: *mut crate::pthread_mutexattr_t) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3TS")]
     pub fn pthread_mutexattr_settype(attr: *mut crate::pthread_mutexattr_t, _type: c_int) -> c_int;
 
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
         link_name = "pthread_cond_init$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3CI")]
     pub fn pthread_cond_init(
         cond: *mut crate::pthread_cond_t,
         attr: *const crate::pthread_condattr_t,
@@ -1370,6 +1568,7 @@ extern "C" {
         all(target_os = "macos", target_arch = "x86"),
         link_name = "pthread_cond_wait$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3CW")]
     pub fn pthread_cond_wait(
         cond: *mut crate::pthread_cond_t,
         lock: *mut crate::pthread_mutex_t,
@@ -1380,20 +1579,27 @@ extern "C" {
     )]
     #[cfg_attr(gnu_time_bits64, link_name = "__pthread_cond_timedwait64")]
     #[cfg_attr(musl_redir_time64, link_name = "__pthread_cond_timedwait_time64")]
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3CT")]
     pub fn pthread_cond_timedwait(
         cond: *mut crate::pthread_cond_t,
         lock: *mut crate::pthread_mutex_t,
         abstime: *const crate::timespec,
     ) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3CS")]
     pub fn pthread_cond_signal(cond: *mut crate::pthread_cond_t) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3CB")]
     pub fn pthread_cond_broadcast(cond: *mut crate::pthread_cond_t) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3CD")]
     pub fn pthread_cond_destroy(cond: *mut crate::pthread_cond_t) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3DI")]
     pub fn pthread_condattr_init(attr: *mut crate::pthread_condattr_t) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@PT3DD")]
     pub fn pthread_condattr_destroy(attr: *mut crate::pthread_condattr_t) -> c_int;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
         link_name = "pthread_rwlock_init$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@P3R@I")]
     pub fn pthread_rwlock_init(
         lock: *mut crate::pthread_rwlock_t,
         attr: *const crate::pthread_rwlockattr_t,
@@ -1402,33 +1608,41 @@ extern "C" {
         all(target_os = "macos", target_arch = "x86"),
         link_name = "pthread_rwlock_destroy$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@P3R@D")]
     pub fn pthread_rwlock_destroy(lock: *mut crate::pthread_rwlock_t) -> c_int;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
         link_name = "pthread_rwlock_rdlock$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@P3RRL")]
     pub fn pthread_rwlock_rdlock(lock: *mut crate::pthread_rwlock_t) -> c_int;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
         link_name = "pthread_rwlock_tryrdlock$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@P3RTR")]
     pub fn pthread_rwlock_tryrdlock(lock: *mut crate::pthread_rwlock_t) -> c_int;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
         link_name = "pthread_rwlock_wrlock$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@P3RWL")]
     pub fn pthread_rwlock_wrlock(lock: *mut crate::pthread_rwlock_t) -> c_int;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
         link_name = "pthread_rwlock_trywrlock$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@P3RTW")]
     pub fn pthread_rwlock_trywrlock(lock: *mut crate::pthread_rwlock_t) -> c_int;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
         link_name = "pthread_rwlock_unlock$UNIX2003"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@P3R@U")]
     pub fn pthread_rwlock_unlock(lock: *mut crate::pthread_rwlock_t) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@P3RAI")]
     pub fn pthread_rwlockattr_init(attr: *mut crate::pthread_rwlockattr_t) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@P3RAD")]
     pub fn pthread_rwlockattr_destroy(attr: *mut crate::pthread_rwlockattr_t) -> c_int;
 
     #[cfg_attr(
@@ -1450,9 +1664,12 @@ extern "C" {
     #[cfg_attr(gnu_time_bits64, link_name = "__utimes64")]
     #[cfg_attr(musl_redir_time64, link_name = "__utimes_time64")]
     pub fn utimes(filename: *const c_char, times: *const crate::timeval) -> c_int;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00436")]
     pub fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00438")]
     pub fn dlerror() -> *mut c_char;
     #[cfg_attr(musl_redir_time64, link_name = "__dlsym_time64")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00437")]
     pub fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
     pub fn dlclose(handle: *mut c_void) -> c_int;
 
@@ -1462,6 +1679,7 @@ extern "C" {
         link_name = "__xnet_getaddrinfo"
     )]
     #[cfg_attr(target_os = "espidf", link_name = "lwip_getaddrinfo")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00082")]
     pub fn getaddrinfo(
         node: *const c_char,
         service: *const c_char,
@@ -1471,7 +1689,9 @@ extern "C" {
     #[cfg(not(all(target_arch = "powerpc", target_vendor = "nintendo")))]
     #[cfg_attr(target_os = "espidf", link_name = "lwip_freeaddrinfo")]
     pub fn freeaddrinfo(res: *mut addrinfo);
+    #[cfg(not(target_os = "zos"))]
     pub fn hstrerror(errcode: c_int) -> *const c_char;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00208")]
     pub fn gai_strerror(errcode: c_int) -> *const c_char;
     #[cfg_attr(
         any(
@@ -1498,17 +1718,20 @@ extern "C" {
     )]
     #[cfg_attr(target_os = "aix", link_name = "_res_init")]
     #[cfg(not(target_os = "l4re"))]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00354")]
     pub fn res_init() -> c_int;
 
     #[cfg_attr(target_os = "netbsd", link_name = "__gmtime_r50")]
     #[cfg_attr(gnu_time_bits64, link_name = "__gmtime64_r")]
     #[cfg_attr(not(musl32_time64), allow(deprecated))]
     #[cfg_attr(musl_redir_time64, link_name = "__gmtime64_r")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00335")]
     pub fn gmtime_r(time_p: *const time_t, result: *mut tm) -> *mut tm;
     #[cfg_attr(target_os = "netbsd", link_name = "__localtime_r50")]
     #[cfg_attr(gnu_time_bits64, link_name = "__localtime64_r")]
     #[cfg_attr(not(musl32_time64), allow(deprecated))]
     #[cfg_attr(musl_redir_time64, link_name = "__localtime64_r")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00627")]
     pub fn localtime_r(time_p: *const time_t, result: *mut tm) -> *mut tm;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
@@ -1517,6 +1740,7 @@ extern "C" {
     #[cfg_attr(target_os = "netbsd", link_name = "__mktime50")]
     #[cfg_attr(any(gnu_time_bits64, musl_redir_time64), link_name = "__mktime64")]
     #[cfg_attr(not(musl32_time64), allow(deprecated))]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00338")]
     pub fn mktime(tm: *mut tm) -> time_t;
     #[cfg_attr(target_os = "netbsd", link_name = "__time50")]
     #[cfg_attr(any(gnu_time_bits64, musl_redir_time64), link_name = "__time64")]
@@ -1525,14 +1749,18 @@ extern "C" {
     #[cfg_attr(target_os = "netbsd", link_name = "__gmtime50")]
     #[cfg_attr(any(gnu_time_bits64, musl_redir_time64), link_name = "__gmtime64")]
     #[cfg_attr(not(musl32_time64), allow(deprecated))]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00334")]
     pub fn gmtime(time_p: *const time_t) -> *mut tm;
     #[cfg_attr(target_os = "netbsd", link_name = "__locatime50")]
     #[cfg_attr(any(gnu_time_bits64, musl_redir_time64), link_name = "__localtime64")]
     #[cfg_attr(not(musl32_time64), allow(deprecated))]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00336")]
     pub fn localtime(time_p: *const time_t) -> *mut tm;
     #[cfg_attr(target_os = "netbsd", link_name = "__difftime50")]
     #[cfg_attr(any(gnu_time_bits64, musl_redir_time64), link_name = "__difftime64")]
     #[cfg_attr(not(musl32_time64), allow(deprecated))]
+    #[cfg(not(target_os = "zos"))]
+    // FIXME: for `time_t`
     pub fn difftime(time1: time_t, time0: time_t) -> c_double;
     #[cfg(not(target_os = "aix"))]
     #[cfg_attr(target_os = "netbsd", link_name = "__timegm50")]
@@ -1546,15 +1774,20 @@ extern "C" {
         all(target_os = "freebsd", any(freebsd11, freebsd10)),
         link_name = "mknod@FBSD_1.0"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00137")]
     pub fn mknod(pathname: *const c_char, mode: mode_t, dev: crate::dev_t) -> c_int;
     #[cfg(not(target_os = "espidf"))]
     pub fn gethostname(name: *mut c_char, len: size_t) -> c_int;
     pub fn endservent();
     pub fn getservbyname(name: *const c_char, proto: *const c_char) -> *mut servent;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00322")]
     pub fn getservbyport(port: c_int, proto: *const c_char) -> *mut servent;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00323")]
     pub fn getservent() -> *mut servent;
     pub fn setservent(stayopen: c_int);
+    #[cfg_attr(target_os = "zos", link_name = "@@A00318")]
     pub fn getprotobyname(name: *const c_char) -> *mut protoent;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00319")]
     pub fn getprotobynumber(proto: c_int) -> *mut protoent;
     pub fn chroot(name: *const c_char) -> c_int;
     #[cfg(target_os = "cygwin")]
@@ -1582,6 +1815,7 @@ extern "C" {
         link_name = "putenv$UNIX2003"
     )]
     #[cfg_attr(target_os = "netbsd", link_name = "__putenv50")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00186")]
     pub fn putenv(string: *mut c_char) -> c_int;
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
@@ -1600,6 +1834,7 @@ extern "C" {
     #[cfg_attr(target_os = "aix", link_name = "__fd_select")]
     #[cfg_attr(gnu_time_bits64, link_name = "__select64")]
     #[cfg_attr(musl_redir_time64, link_name = "__select_time64")]
+    #[cfg_attr(target_os = "zos", link_name = "@@SELCT")]
     pub fn select(
         nfds: c_int,
         readfds: *mut fd_set,
@@ -1608,17 +1843,24 @@ extern "C" {
         timeout: *mut timeval,
     ) -> c_int;
     #[cfg_attr(target_os = "netbsd", link_name = "__setlocale50")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00151")]
     pub fn setlocale(category: c_int, locale: *const c_char) -> *mut c_char;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00075")]
     pub fn localeconv() -> *mut lconv;
 
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
         link_name = "sem_wait$UNIX2003"
     )]
-    pub fn sem_wait(sem: *mut sem_t) -> c_int;
-    pub fn sem_trywait(sem: *mut sem_t) -> c_int;
-    pub fn sem_post(sem: *mut sem_t) -> c_int;
+    cfg_if! {
+        if #[cfg(not(target_os = "zos"))] {
+            pub fn sem_wait(sem: *mut sem_t) -> c_int;
+            pub fn sem_trywait(sem: *mut sem_t) -> c_int;
+            pub fn sem_post(sem: *mut sem_t) -> c_int;
+        }
+    }
     #[cfg_attr(gnu_file_offset_bits64, link_name = "statvfs64")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00204")]
     pub fn statvfs(path: *const c_char, buf: *mut crate::statvfs) -> c_int;
     #[cfg_attr(gnu_file_offset_bits64, link_name = "fstatvfs64")]
     pub fn fstatvfs(fd: c_int, buf: *mut crate::statvfs) -> c_int;
@@ -1642,6 +1884,7 @@ extern "C" {
     #[cfg_attr(target_os = "solaris", link_name = "__sysconf_xpg7")]
     pub fn sysconf(name: c_int) -> c_long;
 
+    #[cfg_attr(target_os = "zos", link_name = "@@A00133")]
     pub fn mkfifo(path: *const c_char, mode: mode_t) -> c_int;
 
     #[cfg_attr(gnu_file_offset_bits64, link_name = "fseeko64")]
@@ -2075,6 +2318,7 @@ extern "C" {
         all(target_os = "linux", target_env = "gnu", target_arch = "sparc64"),
         link_name = "tcgetattr@GLIBC_2.2"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00415")]
     pub fn tcgetattr(fd: c_int, termios: *mut crate::termios) -> c_int;
     #[cfg_attr(
         all(
@@ -2094,21 +2338,26 @@ extern "C" {
         all(target_os = "linux", target_env = "gnu", target_arch = "sparc64"),
         link_name = "tcsetattr@GLIBC_2.2"
     )]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00416")]
     pub fn tcsetattr(fd: c_int, optional_actions: c_int, termios: *const crate::termios) -> c_int;
     pub fn tcflow(fd: c_int, action: c_int) -> c_int;
     pub fn tcflush(fd: c_int, action: c_int) -> c_int;
-    pub fn tcgetsid(fd: c_int) -> crate::pid_t;
+    pub fn tcgetsid(fd: c_int) -> pid_t;
     pub fn tcsendbreak(fd: c_int, duration: c_int) -> c_int;
     #[cfg_attr(gnu_file_offset_bits64, link_name = "mkstemp64")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00184")]
     pub fn mkstemp(template: *mut c_char) -> c_int;
+    #[cfg(not(target_os = "zos"))]
     pub fn mkdtemp(template: *mut c_char) -> *mut c_char;
 
+    #[cfg_attr(target_os = "zos", link_name = "@@A00245")]
     pub fn tmpnam(ptr: *mut c_char) -> *mut c_char;
 
     pub fn openlog(ident: *const c_char, logopt: c_int, facility: c_int);
     pub fn closelog();
     pub fn setlogmask(maskpri: c_int) -> c_int;
     #[cfg_attr(target_os = "macos", link_name = "syslog$DARWIN_EXTSN")]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00366")]
     pub fn syslog(priority: c_int, message: *const c_char, ...);
     #[cfg_attr(
         all(target_os = "macos", target_arch = "x86"),
@@ -2121,12 +2370,14 @@ extern "C" {
     #[cfg(not(target_os = "l4re"))]
     pub fn posix_openpt(flags: c_int) -> c_int;
     #[cfg(not(target_os = "l4re"))]
+    #[cfg_attr(target_os = "zos", link_name = "@@A00185")]
     pub fn ptsname(fd: c_int) -> *mut c_char;
     #[cfg(not(target_os = "l4re"))]
     pub fn unlockpt(fd: c_int) -> c_int;
 
-    #[cfg(not(target_os = "aix"))]
+    #[cfg(not(any(target_os = "aix", target_os = "zos")))]
     pub fn strcasestr(cs: *const c_char, ct: *const c_char) -> *mut c_char;
+    #[cfg_attr(target_os = "zos", link_name = "@@A00585")]
     pub fn getline(lineptr: *mut *mut c_char, n: *mut size_t, stream: *mut FILE) -> ssize_t;
 
     #[cfg_attr(gnu_file_offset_bits64, link_name = "lockf64")]
@@ -2162,6 +2413,7 @@ cfg_if! {
         target_os = "cygwin",
         target_os = "aix",
         target_os = "l4re",
+        target_os = "zos"
     )))] {
         extern "C" {
             #[cfg_attr(target_os = "netbsd", link_name = "__adjtime50")]
@@ -2179,7 +2431,8 @@ cfg_if! {
     if #[cfg(not(any(
         target_os = "emscripten",
         target_os = "android",
-        target_os = "nto"
+        target_os = "nto",
+        target_os = "zos"
     )))] {
         extern "C" {
             pub fn stpncpy(dst: *mut c_char, src: *const c_char, n: size_t) -> *mut c_char;
@@ -2216,7 +2469,7 @@ cfg_if! {
 }
 
 cfg_if! {
-    if #[cfg(not(target_os = "aix"))] {
+    if #[cfg(not(any(target_os = "aix", target_os = "zos")))] {
         extern "C" {
             pub fn dladdr(addr: *const c_void, info: *mut Dl_info) -> c_int;
         }
@@ -2232,7 +2485,7 @@ cfg_if! {
 }
 
 cfg_if! {
-    if #[cfg(not(any(target_env = "uclibc", target_os = "nto")))] {
+    if #[cfg(not(any(target_env = "uclibc", target_os = "nto", target_os = "zos")))] {
         extern "C" {
             pub fn open_wmemstream(ptr: *mut *mut wchar_t, sizeloc: *mut size_t) -> *mut FILE;
         }
@@ -2269,6 +2522,7 @@ cfg_if! {
             /// * <https://docs.oracle.com/cd/E36784_01/html/E36873/libc-3lib.html>
             /// * <https://www.unix.com/man-page/opensolaris/3LIB/libc/>
             #[cfg_attr(gnu_file_offset_bits64, link_name = "readdir64_r")]
+            #[cfg_attr(target_os = "zos", link_name = "@@A00035")]
             pub fn readdir_r(
                 dirp: *mut crate::DIR,
                 entry: *mut crate::dirent,
@@ -2302,20 +2556,22 @@ cfg_if! {
     } else {
         extern "C" {
             #[cfg(not(target_os = "l4re"))]
+            #[cfg_attr(target_os = "zos", link_name = "@@A00614")]
             pub fn readlinkat(
                 dirfd: c_int,
                 pathname: *const c_char,
                 buf: *mut c_char,
                 bufsiz: size_t,
             ) -> ssize_t;
-            #[cfg(not(target_os = "l4re"))]
+            #[cfg(not(any(target_os = "l4re", target_os = "zos")))]
             pub fn fmemopen(buf: *mut c_void, size: size_t, mode: *const c_char) -> *mut FILE;
-            #[cfg(not(target_os = "l4re"))]
+            #[cfg(not(any(target_os = "l4re", target_os = "zos")))]
             pub fn open_memstream(ptr: *mut *mut c_char, sizeloc: *mut size_t) -> *mut FILE;
             pub fn atexit(cb: extern "C" fn()) -> c_int;
             #[cfg_attr(target_os = "netbsd", link_name = "__sigaction14")]
             pub fn sigaction(signum: c_int, act: *const sigaction, oldact: *mut sigaction)
                 -> c_int;
+            #[cfg_attr(target_os = "zos", link_name = "@@A00202")]
             pub fn readlink(path: *const c_char, buf: *mut c_char, bufsz: size_t) -> ssize_t;
             #[cfg_attr(
                 all(target_os = "macos", target_arch = "x86_64"),
@@ -2345,7 +2601,7 @@ cfg_if! {
         extern "C" {
             pub fn cfmakeraw(termios: *mut crate::termios) -> c_int;
         }
-    } else if #[cfg(not(any(target_os = "solaris", target_os = "illumos",)))] {
+    } else if #[cfg(not(any(target_os = "solaris", target_os = "illumos", target_os = "zos")))] {
         extern "C" {
             pub fn cfmakeraw(termios: *mut crate::termios);
         }
@@ -2522,6 +2778,9 @@ cfg_if! {
     } else if #[cfg(target_os = "nuttx")] {
         mod nuttx;
         pub use self::nuttx::*;
+    } else if #[cfg(target_os = "zos")] {
+        mod zos;
+        pub use self::zos::*;
     } else {
         // Unknown target_os
     }

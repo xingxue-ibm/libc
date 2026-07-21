@@ -25,6 +25,12 @@ use std::{
 use regex::Regex;
 
 fn do_cc() {
+
+    // Bypass z/OS for now.
+    if target.contains("zos") {
+        return;
+    }
+
     // NOTE: family could be one of: unix, windows, wasm, or multiple values
     // (e.g. "unix,wasm")
     let family = env::var("CARGO_CFG_TARGET_FAMILY").unwrap();
@@ -90,6 +96,7 @@ fn do_ctest() {
         // QuRT ctest requires a sched_yield stub (static inline in SDK).
         t if t.contains("qurt") => return,
         t if t.contains("aix") => return test_aix(t),
+        t if t.contains("zos") => return test_zos(t),
         t => panic!("unknown target {t}"),
     }
 }
@@ -125,6 +132,11 @@ fn do_semver() {
     let os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap();
+
+    if arch == "s390x" && vendor == "ibm" && os == "zos" {
+        println!("cargo:warning: semer test skipped for s390x-ibm-zos (not supported yet)");
+        return;
+    }
 
     // `libc-test/semver` dir.
     let mut semver_root = PathBuf::from("semver");
@@ -6370,6 +6382,197 @@ fn test_qurt(target: &str) {
     cfg.skip_roundtrip(|_| true);
 
     ctest::generate_test(&mut cfg, "../src/lib.rs", "ctest_output.rs").unwrap();
+}
+
+fn test_zos(target: &str) {
+    assert!(target.contains("zos"));
+
+    let mut cfg = ctest_cfg();
+    // cfg.flag("-fzos-le-char-mode=ascii");
+    cfg.flag("-Wno-everything");
+    cfg.flag("-D_VARARG_EXT_"); // To use __builtin_va_list in stdio.h.
+
+    // Set the include path for z/OS headers
+    cfg.include("/gsa/rtpgsa/home/x/i/xingxue/zos-header");
+
+    // Define z/OS specific macros needed
+    cfg.define("_ALL_SOURCE", None); // _ALL_SOUECE not set by default.
+    cfg.define("__CHARSET_LIB", Some("__ASCII"));
+    cfg.define("_XPLATFORM_SOURCE", None); // To enable definitions such as 'tm_gmtoff' and 'tm_zone' fields in 'struct tm'.
+    cfg.define("_OPEN_SYS_SOCK_EXT3", None);
+    cfg.define("_POSIX_C_SOURCE", Some("200809L"));
+    cfg.define("_XOPEN_SOURCE", Some("600"));
+    cfg.define("_LARGE_TIME_API", None); // To enable stat64 and friends in time.h.
+    cfg.define("_EXT", None); // To enable clearenv in stdlib.h.
+    cfg.define("_OPEN_SYS_FILE_EXT", None); // To enable f_attribute in sys/stat.h.
+    cfg.define("__EDC_TARGET", Some("0x42050000")); // Enable z/OS 4.2.5+ functions
+
+    // Include common z/OS headers
+    headers! { cfg:
+        "aio.h",
+        "dirent.h",
+        "dlfcn.h",
+        "errno.h",
+        "fcntl.h",
+        "fnmatch.h",
+        "glob.h",
+        "grp.h",
+        "iconv.h",
+        "langinfo.h",
+        "libgen.h",
+        "limits.h",
+        "locale.h",
+        "netdb.h",
+        "net/if.h",
+        "netinet/in.h",
+        "netinet/tcp.h",
+        "net/rtrouteh.h",
+        "poll.h",
+        "pthread.h",
+        "pwd.h",
+        "regex.h",
+        "resolv.h",
+        "sched.h",
+        "search.h",
+        "signal.h",
+        "spawn.h",
+        "stddef.h",
+        "stdint.h",
+        "stdio.h",
+        "stdlib.h",
+        "string.h",
+        "strings.h",
+        "stropts.h",
+        "sys/dbx_plugin.h",
+        "sys/endian.h",
+        "sys/epoll.h",
+        "sys/eventfd.h",
+        "sys/file.h",
+        "sys/ioctl.h",
+        "syslog.h",
+        "sys/mman.h",
+        "sys/msg.h",
+        "sys/resource.h",
+        "sys/select.h",
+        "sys/sem.h",
+        "sys/shm.h",
+        "sys/statfs.h",
+        "sys/stat.h",
+        "sys/statvfs.h",
+        "sys/time.h",
+        "sys/times.h",
+        "sys/un.h",
+        "sys/utsname.h",
+        "sys/wait.h",
+        "termios.h",
+        "time.h",
+        "time.h",
+        "ucontext.h",
+        "unistd.h",
+        "unistd.h",
+        "utime.h",
+        "utmpx.h",
+        "xti.h",
+    }
+
+    cfg.type_name(move |ty, is_struct, is_union| {
+        match ty {
+            "FILE" | "fd_set" | "DIR" => ty.to_string(),
+            t if t.ends_with("_t") => t.to_string(),
+            t if is_struct => format!("struct {}", t),
+            t if is_union => format!("union {}", t),
+            t => t.to_string(),
+        }
+    });
+
+    cfg.const_cname(move |name| {
+        match name {
+            "PTHREAD_RWLOCK_INITIALIZER" => "PTHREAD_RWLOCK_INITIALIZER_NP".to_string(),
+            n => n.to_string(),
+        }
+    });
+
+    cfg.skip_const(move |name| {
+        match name {
+            // Skip 'sighandler_t' assignments.
+            "SIG_DFL" | "SIG_ERR" | "SIG_IGN" => true,
+
+            // These errnos are defined in C++'s header errno.h not system's.
+            "EOWNERDEAD" | "ENOTRECOVERABLE" => true,
+
+            // Control settings for use with ATT_SET_CONTROL_BIT()
+            // to set a particular bit of the bitfields1 member of the
+            // f_attributes structure.
+            "ATT_CHANGE_TO_MODE" | "ATT_CHANGE_TO_OWNER" |
+            "ATT_SET_GENERAL_ATTRUBYTES" | "ATT_TRUNCATE_SIZE" |
+            "ATT_CHANGE_ATIME" | "ATT_CHANGE_ATIME_TOD" | "ATT_CHANGE_MTIME" |
+            "ATT_CHANGE_MTIME_TOD" | "ATT_MODIFY_AUDITOR_AUDIT_INFO" |
+            "ATT_MODIFY_USER_AUDIT_INFO" | "ATT_CHANGE_CTIME" |
+            "ATT_CHANGE_CTIME_TOD" | "ATT_CHANGE_REFTIME" |
+            "ATT_CHANGE_REFTIME_TOD" | "ATT_CHANGE_FILEFMT" |
+            "ATT_CHANGE_FILETAG" | "ATT_USE_64BIT_TIME_VALUES" |
+            "ATT_CHABGE_SECLABEL" => true,
+
+            _ => false,
+        }
+    });
+
+    cfg.skip_field(move |struct_, field| {
+        match (struct_, field) {
+            // shm_seg64 is a bit field in sys/shm.h.
+            ("shmid_ds", "shm_seg64") => true,
+
+            // ft_flags is a bit field in sys/stat.h.
+            ("file_tag", "ft_flags") => true,
+
+            // att_bitfields1 and att_bitfields2 are bit fields in sys/stat.h.
+            ("f_attributes", "att_bitfields1") => true,
+            ("f_attributes", "att_bitfields2") => true,
+
+             _ => false,
+        }
+    });
+
+    cfg.skip_field_type(move |struct_, field| {
+        match (struct_, field) {
+            // z/OS does not define 'sighandler_t'.
+            ("sigaction", "sa_sigaction") => true,
+
+             _ => false,
+        }
+    });
+
+    cfg.skip_type(move |ty| {
+        match ty {
+            // `c_char_def` is always public but not always reexported.
+            "c_char_def" => true,
+
+            // z/OS does not define type 'sighandler_t'.
+            "sighandler_t" => true,
+
+            _ => false,
+        }
+    });
+
+
+    cfg.skip_fn(move |name| {
+        // skip those that are manually verified
+        match name {
+            // signal is defined in terms of sighandler_t, so ignore.
+            "signal" => true,
+
+            _ => false,
+        }
+    });
+
+    cfg.skip_roundtrip(move |s| match s {
+        // mcontext_t is defined as an array in sys/types.h, which
+        // cannot be used as a return value of the test function.
+        "mcontext_t" => true,
+
+        _ => false,
+    });
+    cfg.generate(src_hotfix_dir().join("lib.rs"), "main.rs");
 }
 
 /// Platform versions for checking expected support. These are extracted from headers so should be
