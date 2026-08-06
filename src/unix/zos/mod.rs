@@ -1264,6 +1264,24 @@ pub const SHUT_RDWR: c_int = 2;
 pub const SOCK_CLOEXEC: c_int = 0x00001000;
 pub const SOCK_NONBLOCK: c_int = 0x00000800;
 
+// net/if.h
+pub const IFF_UP: c_int = 0x1;
+pub const IFF_BROADCAST: c_int = 0x2;
+pub const IFF_DEBUG: c_int = 0x4;
+pub const IFF_LOOPBACK: c_int = 0x8;
+pub const IFF_POINTOPOINT: c_int = 0x10;
+pub const IFF_NOTRAILERS: c_int = 0x20;
+pub const IFF_RUNNING: c_int = 0x40;
+pub const IFF_NOARP: c_int = 0x80;
+pub const IFF_PROMISC: c_int = 0x100;
+pub const IFF_ALLMULTI: c_int = 0x200;
+pub const IFF_CHECKSUM: c_int = 0x0400;
+pub const IFF_MULTICAST: c_int = 0x0400;
+pub const IFF_POINTOMULTIPT: c_int = 0x0800;
+pub const IFF_BRIDGE: c_int = 0x1000;
+pub const IFF_SNAP: c_int = 0x2000;
+pub const IFF_VIRTUAL: c_int = 0x4000;
+
 // sys/stat.h
 pub const UTIME_NOW: c_int = -1;
 pub const UTIME_OMIT: c_int = -2;
