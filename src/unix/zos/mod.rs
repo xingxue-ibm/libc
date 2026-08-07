@@ -1936,8 +1936,15 @@ extern "C" {
         flags: c_int,
     ) -> c_int;
     pub fn aio_cancel(fildes: c_int, aiocbp: *mut crate::aiocb) -> c_int;
-    pub fn aio_error(aiocbp: *mut crate::aiocb) -> c_int;
+    pub fn aio_error(aiocbp: *const crate::aiocb) -> c_int;
     pub fn aio_read(aiocbp: *mut crate::aiocb) -> c_int;
+    pub fn aio_return(aiocbp: *const crate::aiocb) -> c_int;
+    pub fn aio_suspend(
+        aiocb_list: *const *const crate::aiocb,
+        nitems: c_int,
+        timeout: *const crate::timespec,
+    ) -> c_int;
+    pub fn aio_write(aiocbp: *mut crate::aiocb) -> c_int;
     #[link_name = "@@A00376"]
     pub fn basename(path: *mut c_char) -> *mut c_char;
     #[link_name = "@@A00406"]
